@@ -76,12 +76,14 @@ use Esanj\AiClient\Facades\Ai;   // Ai::workflows() / Ai::executions() / Ai::run
 ### How it fits together
 
 ```
-workflows()->start('key')  ──▶  execution uuid  ──▶  executions()->run(uuid, input)  ──▶  output
-                                    │                     (again and again for a conversation)
-                                    └──▶ or hand executions()->runUrl(uuid) to the browser
+workflows()->start('key')  ──▶  uuid + accessToken  ──▶  executions()->run(uuid, token, input)  ──▶  output
+                                    │                          (again and again for a conversation)
+                                    └──▶ or hand executions()->runUrl(uuid) and the token to the browser
 ```
 
-Starting an execution runs nothing; each `run()` sends one message. A **single** workflow runs from
+Starting an execution runs nothing; each `run()` sends one message. The run endpoint takes the
+execution's own access token, not the service token: `start()` returns it once, next to the uuid.
+It expires (`accessTokenExpiresAt`); `issueToken()` replaces it and `revokeToken()` cancels it. A **single** workflow runs from
 start to end on every message. A **conversation** workflow runs fully on the first message and then
 continues with its last text agent, keeping the history.
 
@@ -93,6 +95,7 @@ $output = Ai::run('summarize', ['text' => $article]);   // start + run
 $output->isJson();        // the workflow's result type is JSON
 $output->data;            // the workflow's JSON structure, resolved
 $output->executionUuid;   // the execution that answered
+$output->accessToken;     // its access token, to send it more messages
 ```
 
 ### Conversation
@@ -101,13 +104,17 @@ $output->executionUuid;   // the execution that answered
 use Esanj\AiClient\Facades\Ai;
 
 $execution = Ai::workflows()->start('support-chat');
-$execution->uuid;                                   // store it with the user's chat
+$execution->uuid;                                   // store both with the user's chat;
+$execution->accessToken;                            // the token is a secret, keep it encrypted
 
-$output = Ai::executions()->run($execution->uuid, ['message' => 'Hi, my order is late']);
+$output = Ai::executions()->run($execution->uuid, $execution->accessToken, ['message' => 'Hi, my order is late']);
 $output->lastReply();                               // the agent's answer
 $output->messages;                                  // ConversationMessage[] — the whole history
 
-Ai::executions()->run($execution->uuid, ['message' => 'Order #1234']);   // continues the chat
+Ai::executions()->run($execution->uuid, $execution->accessToken, ['message' => 'Order #1234']);   // continues the chat
+
+$token = Ai::executions()->issueToken($execution->uuid)->accessToken;   // once the old one expired
+Ai::executions()->revokeToken($execution->uuid);                         // the chat is closed
 ```
 
 ### Template workflows (HTML)
@@ -115,19 +122,22 @@ Ai::executions()->run($execution->uuid, ['message' => 'Order #1234']);   // cont
 A workflow whose result type is *template* answers with a rendered HTML page:
 
 ```php
-$output = Ai::executions()->run($uuid, ['message' => 'Hello']);
+$output = Ai::executions()->run($uuid, $token, ['message' => 'Hello']);
 
 if ($output->isTemplate()) {
     return response($output->html);
 }
 ```
 
-To let the user talk to the workflow directly from the browser, hand them the run URL. It needs no
-token — the execution uuid is the credential:
+To let the user talk to the workflow directly from the browser, hand them the run URL and the
+execution's access token separately. Never put the token in the URL's query string: it leaks into
+the browser history, server logs and the `Referer` header.
 
 ```php
-$url = Ai::executions()->runUrl($execution->uuid);
-// POST {"input": {"message": "..."}}, or a template's form posts its fields there
+$url   = Ai::executions()->runUrl($execution->uuid);
+$token = $execution->accessToken;
+// POST {"input": {"message": "..."}} with "Authorization: Bearer {$token}",
+// or a template's form posts its fields there with an "access_token" field
 ```
 
 ### Listing and inspecting
@@ -164,23 +174,26 @@ use Esanj\AiClient\Exceptions\AiAuthenticationException;
 use Esanj\AiClient\Exceptions\AiOutcomeUnknownException;
 
 try {
-    $output = Ai::executions()->run($uuid, ['message' => $text]);
+    $output = Ai::executions()->run($uuid, $token, ['message' => $text]);
 } catch (AiOutcomeUnknownException $e) {
     // the workflow failed or the connection dropped mid-run; check executions()->show($uuid)
 } catch (AiApiException $e) {
-    if ($e->isForbidden())             { /* workflow inactive, service inactive, or no access */ }
+    if ($e->isUnauthorized())          { /* the execution's access token expired or was revoked */ }
+    elseif ($e->isForbidden())         { /* workflow inactive, service inactive, or no access */ }
     elseif ($e->isNotFound())          { /* unknown workflow key or execution uuid */ }
     elseif ($e->isValidationError())   { $errors = $e->getErrors(); }   // 422
-    elseif ($e->isTooManyRequests())   { /* 60 requests/minute */ }
+    elseif ($e->isTooManyRequests())   { /* rate limit */ }
     else                               { report($e); }
 } catch (AiAuthenticationException $e) {
     // credentials / OAuth problem
 }
 ```
 
-A rejected token (401) is invalidated, re-fetched and the call retried. Server (5xx), connection and
+A rejected service token (401) is invalidated, re-fetched and the call retried; a rejected execution
+token on `run` is not, since only `issueToken()` can replace it. Server (5xx), connection and
 interrupted-transfer failures are retried according to the `retry` config for `list`, `show`,
-`output` and `start` (a repeated `start` at worst leaves an extra execution that never runs).
+`output`, `start`, `issueToken` and `revokeToken` (a repeated `start` at worst leaves an extra
+execution that never runs).
 `run` and `retry` are never repeated automatically: they cost AI usage and add a message to a
 conversation.
 
@@ -194,7 +207,9 @@ conversation.
 | `executions()->show(string $uuid)` | GET | `/api/v1/application/executions/{uuid}` |
 | `executions()->retry(string $uuid, string $logUuid)` | POST | `/api/v1/application/executions/{uuid}/logs/{log}/retry` |
 | `executions()->output(string $uuid, string $logUuid)` | GET | `/api/v1/application/executions/{uuid}/logs/{log}/interface` |
-| `executions()->run(string $uuid, array $input)` | POST | `/api/v1/client/executions/{uuid}/run` (no token) |
+| `executions()->issueToken(string $uuid)` | POST | `/api/v1/application/executions/{uuid}/token` |
+| `executions()->revokeToken(string $uuid)` | DELETE | `/api/v1/application/executions/{uuid}/token` |
+| `executions()->run(string $uuid, string $accessToken, array $input)` | POST | `/api/v1/client/executions/{uuid}/run` (execution token) |
 | `run(string $workflowKey, array $input)` | — | `start` + `executions()->run` |
 
 See [`docs/GUIDE.md`](docs/GUIDE.md) for a full walkthrough.
