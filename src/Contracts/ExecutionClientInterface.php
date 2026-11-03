@@ -31,6 +31,16 @@ interface ExecutionClientInterface
     public function run(string $uuid, string $accessToken, array $input): ExecutionOutput;
 
     /**
+     * Issue a new access token for the execution, replacing the previous one, e.g. once it expired.
+     */
+    public function issueToken(string $uuid): ExecutionResource;
+
+    /**
+     * Revoke the execution's access token, so it can no longer be run until a new one is issued.
+     */
+    public function revokeToken(string $uuid): void;
+
+    /**
      * Run the whole workflow again with the input of one of the execution's runs; the new run
      * becomes the current one. Not retried on a server or connection error.
      */

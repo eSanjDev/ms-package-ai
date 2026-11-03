@@ -54,6 +54,22 @@ class ExecutionClient implements ExecutionClientInterface
         return ExecutionOutput::fromResponse($uuid, $response, $this->apiClient->decode($response), $accessToken);
     }
 
+    /**
+     * Retried on a server or connection error: each issue replaces the previous token, so the
+     * last answer always holds the valid one.
+     */
+    public function issueToken(string $uuid): ExecutionResource
+    {
+        return ExecutionResource::fromArrayWithAccessToken(
+            $this->apiClient->post($this->path($uuid) . '/token', idempotent: true)
+        );
+    }
+
+    public function revokeToken(string $uuid): void
+    {
+        $this->apiClient->send('DELETE', $this->path($uuid) . '/token', retryable: true);
+    }
+
     public function retry(string $uuid, string $logUuid): ExecutionResource
     {
         return ExecutionResource::fromArray($this->apiClient->post($this->path($uuid, $logUuid, 'retry')));
