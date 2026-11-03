@@ -25,9 +25,10 @@ interface ExecutionClientInterface
      * conversation the next ones continue with its last text agent. Not retried on a server or
      * connection error, which surfaces as an AiOutcomeUnknownException.
      *
-     * @param array<string, ?string> $input The workflow's input fields.
+     * @param string                 $accessToken The execution's token, from start() or issueToken().
+     * @param array<string, ?string> $input       The workflow's input fields.
      */
-    public function run(string $uuid, array $input): ExecutionOutput;
+    public function run(string $uuid, string $accessToken, array $input): ExecutionOutput;
 
     /**
      * Run the whole workflow again with the input of one of the execution's runs; the new run
@@ -42,7 +43,9 @@ interface ExecutionClientInterface
 
     /**
      * The public URL that runs the execution, for handing to a browser: a template's form posts
-     * its fields there, and API callers post {"input": {...}}. It needs no token.
+     * its fields there, and API callers post {"input": {...}}. Hand the access token over
+     * separately: it goes in an "Authorization: Bearer" header, or an "access_token" form field.
+     * Never put it in the URL, where it leaks into history, logs and the Referer header.
      */
     public function runUrl(string $uuid): string;
 }

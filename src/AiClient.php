@@ -30,6 +30,8 @@ class AiClient implements AiClientInterface
 
     public function run(string $workflowKey, array $input): ExecutionOutput
     {
-        return $this->executions->run($this->workflows->start($workflowKey)->uuid, $input);
+        $execution = $this->workflows->start($workflowKey);
+
+        return $this->executions->run($execution->uuid, $execution->accessToken, $input);
     }
 }

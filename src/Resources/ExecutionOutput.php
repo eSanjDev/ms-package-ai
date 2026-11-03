@@ -17,6 +17,7 @@ final class ExecutionOutput
      * @param array<array-key, mixed> $data          The resolved JSON structure; empty for a template.
      * @param ConversationMessage[]   $messages      A conversation's messages, oldest first; JSON runs only.
      * @param string|null             $html          The rendered page of a template.
+     * @param string|null             $accessToken   The execution's access token the run was sent with; null for output().
      */
     public function __construct(
         public readonly ResultType $type,
@@ -24,12 +25,13 @@ final class ExecutionOutput
         public readonly array $data,
         public readonly array $messages,
         public readonly ?string $html,
+        public readonly ?string $accessToken = null,
     ) {}
 
     /**
      * @param array|null $json The decoded body, or null when it is not a JSON object.
      */
-    public static function fromResponse(string $executionUuid, ResponseInterface $response, ?array $json): self
+    public static function fromResponse(string $executionUuid, ResponseInterface $response, ?array $json, ?string $accessToken = null): self
     {
         if (str_contains(strtolower($response->getHeaderLine('Content-Type')), 'text/html')) {
             return new self(
@@ -38,6 +40,7 @@ final class ExecutionOutput
                 data:          [],
                 messages:      [],
                 html:          (string) $response->getBody(),
+                accessToken:   $accessToken,
             );
         }
 
@@ -55,6 +58,7 @@ final class ExecutionOutput
             data:          $body->array('data'),
             messages:      array_map(ConversationMessage::fromItem(...), array_values($body->array('messages'))),
             html:          null,
+            accessToken:   $accessToken,
         );
     }
 

@@ -57,8 +57,8 @@ class ApiClient
 
     /**
      * Sends a request and returns the successful response as is, for the endpoints that answer with
-     * a workflow's output: JSON or a rendered HTML page. Without $authenticated no token is sent,
-     * for the service's public endpoints.
+     * a workflow's output: JSON or a rendered HTML page. Without $authenticated the service token is
+     * not sent, for the public endpoints that take their own credential in $options.
      */
     public function send(string $method, string $path, array $options = [], bool $retryable = false, bool $authenticated = true): ResponseInterface
     {

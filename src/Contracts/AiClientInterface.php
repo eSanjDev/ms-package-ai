@@ -18,7 +18,7 @@ interface AiClientInterface
 
     /**
      * Start an execution of a workflow and send it its first message in one go. Keep the result's
-     * executionUuid to continue a conversation with executions()->run().
+     * executionUuid and accessToken to continue a conversation with executions()->run().
      *
      * @param array<string, ?string> $input
      */

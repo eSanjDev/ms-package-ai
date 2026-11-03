@@ -38,16 +38,20 @@ class ExecutionClient implements ExecutionClientInterface
         return ExecutionResource::fromArray($this->apiClient->get($this->path($uuid)));
     }
 
-    public function run(string $uuid, array $input): ExecutionOutput
+    public function run(string $uuid, string $accessToken, array $input): ExecutionOutput
     {
+        // The run endpoint takes the execution's own token instead of the service token.
         $response = $this->apiClient->send(
             'POST',
             sprintf(self::RUN_PATH, rawurlencode($uuid)),
-            ['json' => ['input' => $input], 'headers' => ['Accept' => self::OUTPUT_ACCEPT]],
+            [
+                'json'    => ['input' => $input],
+                'headers' => ['Accept' => self::OUTPUT_ACCEPT, 'Authorization' => "Bearer {$accessToken}"],
+            ],
             authenticated: false,
         );
 
-        return ExecutionOutput::fromResponse($uuid, $response, $this->apiClient->decode($response));
+        return ExecutionOutput::fromResponse($uuid, $response, $this->apiClient->decode($response), $accessToken);
     }
 
     public function retry(string $uuid, string $logUuid): ExecutionResource
