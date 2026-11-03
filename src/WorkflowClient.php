@@ -28,7 +28,7 @@ class WorkflowClient implements WorkflowClientInterface
 
     public function start(string $key): ExecutionResource
     {
-        return ExecutionResource::fromArray(
+        return ExecutionResource::fromArrayWithAccessToken(
             $this->apiClient->post(self::BASE . '/' . rawurlencode($key) . '/executions', idempotent: true)
         );
     }

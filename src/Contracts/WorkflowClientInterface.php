@@ -16,9 +16,9 @@ interface WorkflowClientInterface
     public function list(?string $search = null, int $page = 1, int $perPage = 30): PaginatedResult;
 
     /**
-     * Open an execution of a workflow. Nothing runs yet: pass the returned uuid to
-     * executions()->run(), or hand it (or executions()->runUrl()) to the user. Retried on a server
-     * or connection error, which at worst leaves an extra execution that never runs.
+     * Open an execution of a workflow. Nothing runs yet: pass the returned uuid and accessToken to
+     * executions()->run(), or hand them (or executions()->runUrl() and the token) to the user.
+     * Retried on a server or connection error, which at worst leaves an extra execution that never runs.
      */
     public function start(string $key): ExecutionResource;
 }
